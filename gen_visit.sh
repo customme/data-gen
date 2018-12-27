@@ -54,6 +54,14 @@ function init()
 
     # 获取时段分布
     log_fn get_hour_rate
+
+    # 新增事实表
+    tbl_fact_new=fact_new1_$product_code
+    # 活跃事实表
+    tbl_fact_active=fact_active1_$product_code
+
+    export LC_ALL=C
+    sep=`echo -e "\t"`
 }
 
 # 获取地区ip
@@ -383,9 +391,6 @@ function gen_visit1()
 # 生成访问日志
 function gen_visit()
 {
-    export LC_ALL=C
-    sep=`echo -e "\t"`
-
     local file_active1=$tmp_dir/active1
     local file_active2=$tmp_dir/active2
     local file_active3=$tmp_dir/active3
@@ -412,6 +417,187 @@ function gen_visit()
     fi
 }
 
+# 创建表
+function create_table()
+{
+    echo "CREATE TABLE IF NOT EXISTS $tbl_fact_new (
+      aid VARCHAR(64),
+      channel_code VARCHAR(32),
+      init_area VARCHAR(16),
+      area VARCHAR(16),
+      init_ip VARCHAR(16),
+      ip VARCHAR(16),
+      create_time DATETIME,
+      update_time DATETIME,
+      create_date INT,
+      PRIMARY KEY (aid),
+      KEY idx_channel_code (channel_code),
+      KEY idx_init_area (init_area),
+      KEY idx_area (area),
+      KEY idx_create_date (create_date)
+    ) ENGINE=InnoDB COMMENT='新增事实表';
+
+    CREATE TABLE IF NOT EXISTS $tbl_fact_active (
+      aid VARCHAR(64),
+      channel_code VARCHAR(32),
+      area VARCHAR(16),
+      active_date INT,
+      create_date INT,
+      date_diff INT,
+      visit_times INT,
+      PRIMARY KEY (aid, active_date),
+      KEY idx_channel_code (channel_code),
+      KEY idx_area (area),
+      KEY idx_active_date (active_date),
+      KEY idx_create_date (create_date),
+      KEY idx_date_diff (date_diff),
+      KEY idx_visit_times (visit_times)
+    ) ENGINE=InnoDB COMMENT='活跃事实表';
+    " | exec_dw
+}
+
+# 统计新增
+function stat_new()
+{
+    # 增量访问日志
+    awk -F '\t' 'BEGIN{
+        OFS=FS
+    }{
+        print $1,$2,$3,$3,$4,$4,$5,$5
+    }' $file_visit > $file_visit1
+
+    # 合并新增
+    cat $file_new1 >> $file_visit1
+
+    # 排序
+    sort -t $'\t' -k 1,1 -k 8,8 $file_visit1 -o $file_visit1
+
+    # 解析访问日志
+    log "Parse visit log"
+    awk -F '\t' 'BEGIN{
+        OFS=FS
+    }{
+        if($1 != aid){
+            if(aid != "") print aid,channel_code,init_area,area,init_ip,ip,create_time,update_time,create_date
+            aid=$1
+            channel_code=$2
+            init_area=$3
+            init_ip=$5
+            create_time=$7
+            create_date=substr(create_time,1,10)
+            gsub("-","",create_date)
+        }
+        area=$4
+        ip=$6
+        update_time=$8
+    }END{
+        print aid,channel_code,init_area,area,init_ip,ip,create_time,update_time,create_date
+    }' $file_visit1 > $file_new
+
+    # 新增入库
+    log "Load data into table $tbl_fact_new"
+    echo "TRUNCATE TABLE $tbl_fact_new;
+    ALTER TABLE $tbl_fact_new DISABLE KEYS;
+    LOAD DATA LOCAL INFILE '$file_new' INTO TABLE $tbl_fact_new (aid, channel_code, init_area, area, init_ip, ip, create_time, update_time, create_date);
+    ALTER TABLE $tbl_fact_new ENABLE KEYS;
+    " | exec_dw
+
+    # 最新新增
+    awk -F '\t' 'BEGIN{OFS=FS}{print $1,$2,$3,$4,$5,$6,$7,$8}' $file_new > $file_new1
+}
+
+# 统计活跃
+function stat_active()
+{
+    # 解析访问日志
+    log "Parse visit log"
+    sort -t $'\t' -k 1,1 -k 5,5 $file_visit | awk -F '\t' 'BEGIN{
+        OFS=FS
+    }{
+        if($1 == aid){
+            visit_times++
+        }else{
+            if(aid != ""){
+                print aid,channel_code,area,active_date,visit_times
+            }
+            aid=$1
+            channel_code=$2
+            area=$3
+            active_date=substr($5,1,10)
+            gsub("-","",active_date)
+            visit_times=1
+        }
+    }END{
+        print aid,channel_code,area,active_date,visit_times
+    }' > $file_active1
+
+    # 获取新增表channel_code,create_date
+    awk -F '\t' 'BEGIN{
+        OFS=FS
+    }{
+        create_date=substr($7,1,10)
+        gsub("-","",create_date)
+        print $1,$2,create_date
+    }' $file_new > $file_new2
+
+    # 关联新增表获取channel_code,create_date
+    sort $file_new2 -o $file_new2
+    sort $file_active1 -o $file_active1
+    join -t "$sep" -a 1 $file_active1 $file_new2 | awk -F '\t' 'BEGIN{
+        OFS=FS
+    }{
+        if(NF == 7){
+            channel_code=$6
+            create_date=$7
+        }else{
+            channel_code=$2
+            create_date=$4
+        }
+        print $1,channel_code,$3,$4,create_date,$5
+    }' > $file_active
+
+    # 活跃入库
+    log "Load data into table $tbl_fact_active"
+    echo "DELETE FROM $tbl_fact_active WHERE active_date = ${the_date//-/};
+    ALTER TABLE $tbl_fact_active DISABLE KEYS;
+    LOAD DATA LOCAL INFILE '$file_active' INTO TABLE $tbl_fact_active (aid, channel_code, area, active_date, create_date, visit_times)
+    SET date_diff = DATEDIFF(active_date, create_date);
+    ALTER TABLE $tbl_fact_active ENABLE KEYS;
+    " | exec_dw
+}
+
+# 统计数据
+function stat_data()
+{
+    local file_new=$tmp_dir/fact_new
+    local file_active=$tmp_dir/fact_active
+
+    local file_new1=$tmp_dir/new1
+    local file_visit1=$tmp_dir/visit1
+    local file_active1=$tmp_dir/active1
+    local file_new2=$tmp_dir/new2
+
+    # 创建表
+    create_table
+
+    # 新增事实表
+    echo "SELECT aid, channel_code, init_area, area, init_ip, ip, create_time, update_time FROM $tbl_fact_new;" | exec_dw > $file_new1
+
+    range_date $start_date $end_date | while read the_date; do
+        log "Stat visit log for day $the_date"
+        file_visit=$data_dir/visit.$the_date
+
+        # 统计新增
+        stat_new
+
+        # 统计活跃
+        stat_active
+    done
+
+    # 删除临时文件
+    rm -f $file_new $file_new1 $file_new2 $file_active $file_active1 $file_visit1
+}
+
 # 校验数据
 function check_data()
 {
@@ -421,7 +607,7 @@ function check_data()
 # 用法
 function usage()
 {
-    echo "Usage: $0 [ -g generate data ] < -p product code > < -d start date[,end date] > [ -c check data ] [ -v debug mode ]" >&2
+    echo "Usage: $0 [ -g generate data ] < -p product code > < -d start date[,end date] > [ -s stat data ] [ -c check data ] [ -v debug mode ]" >&2
 }
 
 function main()
@@ -431,7 +617,7 @@ function main()
         exit 1
     fi
 
-    while getopts "gp:d:cv" opt; do
+    while getopts "gp:d:scv" opt; do
         case "$opt" in
             g)
                 gen_flag=1;;
@@ -441,6 +627,8 @@ function main()
                 args=(${OPTARG//,/ })
                 start_date=${args[0]}
                 end_date=${args[1]:-$start_date};;
+            s)
+                stat_flag=1;;
             c)
                 check_flag=1;;
             v)
@@ -462,6 +650,11 @@ function main()
     # 生成访问日志
     if [[ $gen_flag ]]; then
         log_fn gen_visit
+    fi
+
+    # 统计数据
+    if [[ $stat_flag ]]; then
+        log_fn stat_data
     fi
 
     # 校验数据
