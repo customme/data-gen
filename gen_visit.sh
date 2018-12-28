@@ -518,17 +518,16 @@ function stat_active()
             visit_times++
         }else{
             if(aid != ""){
-                print aid,channel_code,area,active_date,visit_times
+                print aid,area,active_date,visit_times
             }
             aid=$1
-            channel_code=$2
             area=$3
             active_date=substr($5,1,10)
             gsub("-","",active_date)
             visit_times=1
         }
     }END{
-        print aid,channel_code,area,active_date,visit_times
+        print aid,area,active_date,visit_times
     }' > $file_active1
 
     # 获取新增表channel_code,create_date
@@ -543,18 +542,7 @@ function stat_active()
     # 关联新增表获取channel_code,create_date
     sort $file_new2 -o $file_new2
     sort $file_active1 -o $file_active1
-    join -t "$sep" -a 1 $file_active1 $file_new2 | awk -F '\t' 'BEGIN{
-        OFS=FS
-    }{
-        if(NF == 7){
-            channel_code=$6
-            create_date=$7
-        }else{
-            channel_code=$2
-            create_date=$4
-        }
-        print $1,channel_code,$3,$4,create_date,$5
-    }' > $file_active
+    join -t "$sep" -o 1.1 2.2 1.2 1.3 2.3 1.4 $file_active1 $file_new2 > $file_active
 
     # 活跃入库
     log "Load data into table $tbl_fact_active"
