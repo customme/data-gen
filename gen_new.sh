@@ -194,49 +194,49 @@ function load_data()
 # 聚合数据
 function agg_data()
 {
-    echo "CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_01 (
+    echo "CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_1 (
       create_date INT,
       fact_count INT,
       PRIMARY KEY(create_date)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_01
+    REPLACE INTO ${tp_agg_new}l_1
     SELECT create_date, COUNT(1)
     FROM $tbl_fact_new
     WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
     GROUP BY create_date;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_02 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_2 (
       create_date INT,
       channel_code VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, channel_code)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_02
+    REPLACE INTO ${tp_agg_new}l_2
     SELECT create_date, channel_code, COUNT(1)
     FROM $tbl_fact_new
     WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
     GROUP BY create_date, channel_code;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_03 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_3 (
       create_date INT,
       area VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_03
+    REPLACE INTO ${tp_agg_new}l_3
     SELECT create_date, area, COUNT(1)
     FROM $tbl_fact_new
     WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
     GROUP BY create_date, area;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_04 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_4 (
       create_date INT,
       channel_code VARCHAR(50),
       area VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, channel_code, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_04
+    REPLACE INTO ${tp_agg_new}l_4
     SELECT create_date, channel_code, area, COUNT(1)
     FROM $tbl_fact_new
     WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
@@ -247,7 +247,51 @@ function agg_data()
 # 校验数据
 function check_data()
 {
-    echo "TODO"
+    local file_new1=$tmp_dir/new.db
+    local file_new2=$tmp_dir/new.stat
+    local file_diff=$tmp_dir/new.diff
+    local file_id=$tmp_dir/ids
+    range_date $start_date $end_date | while read the_date; do
+        file_new=$data_dir/new.$the_date
+        # 数据库数据
+        grep $the_date $file_add_count >> $file_new1
+        # 生成的数据
+        awk -F '\t' 'BEGIN{
+            OFS=FS
+        }{
+            count[$2]++
+        }END{
+            for(key in count){
+                print "'$the_date'",key,count[key]
+            }
+        }' $file_new >> $file_new2
+        # ID
+        awk '{print $1}' $file_new >> $file_id
+    done
+
+    # 校验渠道新增量
+    log "Check channel add count"
+    # 排序
+    sort $file_new1 -o $file_new1
+    sort $file_new2 -o $file_new2
+    # 比较
+    diff $file_new1 $file_new2 > $file_diff
+    if [[ -s $file_diff ]]; then
+        log "ERROR: unmatched channel add count found" >&2
+    fi
+
+    # 校验ID是否重复
+    log "Check id"
+    local count1=`awk '{count+=$3}END{print count}' $file_new1`
+    local count2=`sort -u $file_id | wc -l`
+    if [[ $count1 -ne $count2 ]]; then
+        log "ERROR: duplicate id found" >&2
+    fi
+
+    # 删除临时文件
+    if [[ ! $debug_flag ]]; then
+        rm -f $file_new1 $file_new2 $file_diff $file_id
+    fi
 }
 
 # 用法
