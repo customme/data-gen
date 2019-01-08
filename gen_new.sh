@@ -194,53 +194,84 @@ function load_data()
 # 聚合数据
 function agg_data()
 {
+    # 创建聚合表
     echo "CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_1 (
       create_date INT,
       fact_count INT,
       PRIMARY KEY(create_date)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_1
-    SELECT create_date, COUNT(1)
-    FROM $tbl_fact_new
-    WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
-    GROUP BY create_date;
 
     CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_2 (
+      channel_code VARCHAR(50),
+      fact_count INT,
+      PRIMARY KEY(channel_code)
+    ) ENGINE=MyISAM;
+
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_3 (
+      area VARCHAR(50),
+      fact_count INT,
+      PRIMARY KEY(area)
+    ) ENGINE=MyISAM;
+
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_4 (
       create_date INT,
       channel_code VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, channel_code)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_2
-    SELECT create_date, channel_code, COUNT(1)
-    FROM $tbl_fact_new
-    WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
-    GROUP BY create_date, channel_code;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_3 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_5 (
       create_date INT,
       area VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_3
-    SELECT create_date, area, COUNT(1)
-    FROM $tbl_fact_new
-    WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
-    GROUP BY create_date, area;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_4 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_6 (
+      channel_code VARCHAR(50),
+      area VARCHAR(50),
+      fact_count INT,
+      PRIMARY KEY(channel_code, area)
+    ) ENGINE=MyISAM;
+
+    CREATE TABLE IF NOT EXISTS ${tp_agg_new}l_7 (
       create_date INT,
       channel_code VARCHAR(50),
       area VARCHAR(50),
       fact_count INT,
       PRIMARY KEY(create_date, channel_code, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_new}l_4
-    SELECT create_date, channel_code, area, COUNT(1)
-    FROM $tbl_fact_new
-    WHERE create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}
-    GROUP BY create_date, channel_code, area;
+    " | exec_dw
+
+    # 聚合数据
+    local filter="create_date >= ${start_date//-/} AND create_date <= ${end_date//-/}"
+    echo "DELETE FROM ${tp_agg_new}l_1 WHERE $filter;
+    INSERT INTO ${tp_agg_new}l_1
+    SELECT create_date, COUNT(1) FROM $tbl_fact_new WHERE $filter GROUP BY create_date;
+
+    TRUNCATE TABLE ${tp_agg_new}l_2;
+    INSERT INTO ${tp_agg_new}l_2
+    SELECT channel_code, COUNT(1) FROM $tbl_fact_new GROUP BY channel_code;
+
+    TRUNCATE TABLE ${tp_agg_new}l_3;
+    INSERT INTO ${tp_agg_new}l_3
+    SELECT area, COUNT(1) FROM $tbl_fact_new GROUP BY area;
+
+    DELETE FROM ${tp_agg_new}l_4 WHERE $filter;
+    INSERT INTO ${tp_agg_new}l_4
+    SELECT create_date, channel_code, COUNT(1) FROM $tbl_fact_new WHERE $filter GROUP BY create_date, channel_code;
+
+    DELETE FROM ${tp_agg_new}l_5 WHERE $filter;
+    INSERT INTO ${tp_agg_new}l_5
+    SELECT create_date, area, COUNT(1) FROM $tbl_fact_new WHERE $filter GROUP BY create_date, area;
+
+    TRUNCATE TABLE ${tp_agg_new}l_6;
+    INSERT INTO ${tp_agg_new}l_6
+    SELECT channel_code, area, COUNT(1) FROM $tbl_fact_new GROUP BY channel_code, area;
+
+    DELETE FROM ${tp_agg_new}l_7 WHERE $filter;
+    INSERT INTO ${tp_agg_new}l_7
+    SELECT create_date, channel_code, area, COUNT(1) FROM $tbl_fact_new WHERE $filter GROUP BY create_date, channel_code, area;
     " | exec_dw
 }
 

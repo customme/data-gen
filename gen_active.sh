@@ -42,6 +42,9 @@ function init()
     tbl_fact_active=fact_active_$product_code
     # 活跃聚合表前缀
     tp_agg_active=${TP_AGG}active_${product_code}_
+
+    export LC_ALL=C
+    sep=`echo -e "\t"`
 }
 
 # 获取产品留存率
@@ -626,26 +629,24 @@ function load_data()
     echo "ALTER TABLE $tbl_fact_active ENABLE KEYS;" | exec_dw
 
     # 删除临时文件
-    rm -f $file_new $file_active
+    if [[ ! $debug_flag ]]; then
+        rm -f $file_new $file_active
+    fi
 }
 
 # 聚合数据
 function agg_data()
 {
-    echo "CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_01 (
+    # 创建聚合表
+    echo "CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_1 (
       active_date INT,
       create_date INT,
       date_diff INT,
       fact_count INT,
       PRIMARY KEY(active_date, create_date)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_active}l_01
-    SELECT active_date, create_date, date_diff, COUNT(1)
-    FROM $tbl_fact_active
-    WHERE active_date >= ${start_date//-/} AND active_date <= ${end_date//-/}
-    GROUP BY active_date, create_date;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_02 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_2 (
       active_date INT,
       create_date INT,
       date_diff INT,
@@ -653,13 +654,8 @@ function agg_data()
       fact_count INT,
       PRIMARY KEY(active_date, create_date, channel_code)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_active}l_02
-    SELECT active_date, create_date, date_diff, channel_code, COUNT(1)
-    FROM $tbl_fact_active
-    WHERE active_date >= ${start_date//-/} AND active_date <= ${end_date//-/}
-    GROUP BY active_date, create_date, channel_code;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_03 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_3 (
       active_date INT,
       create_date INT,
       date_diff INT,
@@ -667,13 +663,8 @@ function agg_data()
       fact_count INT,
       PRIMARY KEY(active_date, create_date, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_active}l_03
-    SELECT active_date, create_date, date_diff, area, COUNT(1)
-    FROM $tbl_fact_active
-    WHERE active_date >= ${start_date//-/} AND active_date <= ${end_date//-/}
-    GROUP BY active_date, create_date, area;
 
-    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_04 (
+    CREATE TABLE IF NOT EXISTS ${tp_agg_active}l_4 (
       active_date INT,
       create_date INT,
       date_diff INT,
@@ -682,11 +673,25 @@ function agg_data()
       fact_count INT,
       PRIMARY KEY(active_date, create_date, channel_code, area)
     ) ENGINE=MyISAM;
-    REPLACE INTO ${tp_agg_active}l_04
-    SELECT active_date, create_date, date_diff, channel_code, area, COUNT(1)
-    FROM $tbl_fact_active
-    WHERE active_date >= ${start_date//-/} AND active_date <= ${end_date//-/}
-    GROUP BY active_date, create_date, channel_code, area;
+    " | exec_dw
+
+    # 聚合数据
+    local filter="active_date >= ${start_date//-/} AND active_date <= ${end_date//-/}"
+    echo "DELETE FROM ${tp_agg_active}l_1 WHERE $filter;
+    INSERT INTO ${tp_agg_active}l_1
+    SELECT active_date, create_date, date_diff, COUNT(1) FROM $tbl_fact_active WHERE $filter GROUP BY active_date, create_date;
+
+    DELETE FROM ${tp_agg_active}l_2 WHERE $filter;
+    INSERT INTO ${tp_agg_active}l_2
+    SELECT active_date, create_date, date_diff, channel_code, COUNT(1) FROM $tbl_fact_active WHERE $filter GROUP BY active_date, create_date, channel_code;
+
+    DELETE FROM ${tp_agg_active}l_3 WHERE $filter;
+    INSERT INTO ${tp_agg_active}l_3
+    SELECT active_date, create_date, date_diff, area, COUNT(1) FROM $tbl_fact_active WHERE $filter GROUP BY active_date, create_date, area;
+
+    DELETE FROM ${tp_agg_active}l_4 WHERE $filter;
+    INSERT INTO ${tp_agg_active}l_4
+    SELECT active_date, create_date, date_diff, channel_code, area, COUNT(1) FROM $tbl_fact_active WHERE $filter GROUP BY active_date, create_date, channel_code, area;
     " | exec_dw
 }
 
