@@ -137,7 +137,7 @@ function gen_aid()
 
     # 非debug模式删除临时文件
     if [[ ! $debug_flag ]]; then
-        rm -rf $file_aid1 $file_aid2 $file_aid3
+        rm -f $file_aid1 $file_aid2 $file_aid3
     fi
 }
 
@@ -156,7 +156,35 @@ function load_data()
 # 校验数据
 function check_data()
 {
-    echo "TODO"
+    if [[ $gen_num -gt 0 ]]; then
+        log "Check incremental data"
+        # 个数是否一致
+        local count=`wc -l $file_aid | awk '{print $1}'`
+        if [[ $gen_num -ne $count ]]; then
+            log "Error: Android ID number does not match"
+        fi
+        # ID是否重复
+        local id_cnt=`awk '{print $1}' $file_aid | sort -u | wc -l`
+        if [[ $gen_num -ne $id_cnt ]]; then
+            log "Error: duplicate ID found"
+        fi
+        # Android ID是否重复
+        local aid_cnt=`awk '{print $2}' $file_aid | sort -u | wc -l`
+        if [[ $gen_num -ne $aid_cnt ]]; then
+            log "Error: duplicate Android ID found"
+        fi
+    fi
+
+    log "Check all data"
+    local count=`wc -l $FILE_AID | awk '{print $1}'`
+    local id_cnt=`awk '{print $1}' $FILE_AID | sort -u | wc -l`
+    if [[ $count -ne $id_cnt ]]; then
+        log "Error: duplicate ID found"
+    fi
+    local aid_cnt=`awk '{print $2}' $FILE_AID | sort -u | wc -l`
+    if [[ $count -ne $aid_cnt ]]; then
+        log "Error: duplicate Android ID found"
+    fi
 }
 
 # 用法
