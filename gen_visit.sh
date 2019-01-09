@@ -55,6 +55,8 @@ function init()
     # 获取时段分布
     log_fn get_hour_rate
 
+    # 访问日志表
+    tbl_visit=visit_$product_code
     # 新增事实表
     tbl_fact_new=fact_new1_$product_code
     # 活跃事实表
@@ -417,7 +419,41 @@ function gen_visit()
     fi
 }
 
-# 创建表
+# 导入数据
+function load_data()
+{
+    # 创建表
+    echo "CREATE TABLE IF NOT EXISTS $tbl_visit (
+      aid VARCHAR(64),
+      channel_code VARCHAR(32),
+      area VARCHAR(16),
+      ip VARCHAR(16),
+      create_time DATETIME,
+      duration INT COMMENT '使用时长(秒)',
+      PRIMARY KEY(aid, create_time)
+    ) ENGINE=MyISAM COMMENT='访问日志';
+    " | exec_dw
+
+    # 如果数据已经导入，先删除
+    echo "DELETE FROM $tbl_visit WHERE create_time >= $start_date AND create_time <=$end_date;" | exec_dw
+
+    # 禁用索引
+    echo "ALTER TABLE $tbl_visit DISABLE KEYS;" | exec_dw
+
+    # 按天导入
+    range_date $start_date $end_date | while read the_date; do
+        the_file=$data_dir/visit.$the_date
+        if [[ -s $the_file ]]; then
+            log "Load file $the_file"
+            echo "LOAD DATA LOCAL INFILE '$the_file' INTO TABLE $tbl_visit (aid, channel_code, area, ip, create_time, duration);" | exec_dw
+        fi
+    done
+
+    # 启用索引
+    echo "ALTER TABLE $tbl_visit ENABLE KEYS;" | exec_dw
+}
+
+# 创建聚合表
 function create_table()
 {
     echo "CREATE TABLE IF NOT EXISTS $tbl_fact_new (
@@ -595,7 +631,7 @@ function check_data()
 # 用法
 function usage()
 {
-    echo "Usage: $0 [ -g generate data ] < -p product code > < -d start date[,end date] > [ -s stat data ] [ -c check data ] [ -v debug mode ]" >&2
+    echo "Usage: $0 [ -g generate data ] < -p product code > < -d start date[,end date] > [ -l load data ] [ -s stat data ] [ -c check data ] [ -v debug mode ]" >&2
 }
 
 function main()
@@ -605,7 +641,7 @@ function main()
         exit 1
     fi
 
-    while getopts "gp:d:scv" opt; do
+    while getopts "gp:d:lscv" opt; do
         case "$opt" in
             g)
                 gen_flag=1;;
@@ -615,6 +651,8 @@ function main()
                 args=(${OPTARG//,/ })
                 start_date=${args[0]}
                 end_date=${args[1]:-$start_date};;
+            l)
+                load_flag=1;;
             s)
                 stat_flag=1;;
             c)
@@ -638,6 +676,11 @@ function main()
     # 生成访问日志
     if [[ $gen_flag ]]; then
         log_fn gen_visit
+    fi
+
+    # 导入访问日志
+    if [[ $load_flag ]]; then
+        log_fn load_data
     fi
 
     # 统计数据
