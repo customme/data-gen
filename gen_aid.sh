@@ -161,17 +161,20 @@ function check_data()
         # 个数是否一致
         local count=`wc -l $file_aid | awk '{print $1}'`
         if [[ $gen_num -ne $count ]]; then
-            log "ERROR: Android ID number does not match"
+            error_flag=1
+            log "ERROR: Android ID number does not match" >&2
         fi
         # ID是否重复
         local id_cnt=`awk '{print $1}' $file_aid | sort -u | wc -l`
         if [[ $gen_num -ne $id_cnt ]]; then
-            log "ERROR: duplicate ID found"
+            error_flag=1
+            log "ERROR: duplicate ID found" >&2
         fi
         # Android ID是否重复
         local aid_cnt=`awk '{print $2}' $file_aid | sort -u | wc -l`
         if [[ $gen_num -ne $aid_cnt ]]; then
-            log "ERROR: duplicate Android ID found"
+            error_flag=1
+            log "ERROR: duplicate Android ID found" >&2
         fi
     fi
 
@@ -179,12 +182,16 @@ function check_data()
     local count=`wc -l $FILE_AID | awk '{print $1}'`
     local id_cnt=`awk '{print $1}' $FILE_AID | sort -u | wc -l`
     if [[ $count -ne $id_cnt ]]; then
-        log "ERROR: duplicate ID found"
+        error_flag=1
+        log "ERROR: duplicate ID found" >&2
     fi
     local aid_cnt=`awk '{print $2}' $FILE_AID | sort -u | wc -l`
     if [[ $count -ne $aid_cnt ]]; then
-        log "ERROR: duplicate Android ID found"
+        error_flag=1
+        log "ERROR: duplicate Android ID found" >&2
     fi
+
+    return ${error_flag:-0}
 }
 
 # 用法

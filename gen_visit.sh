@@ -62,6 +62,9 @@ function init()
     # 活跃事实表
     tbl_fact_active=fact_active1_$product_code
 
+    # 校验数据样本数
+    rand_count=100
+
     export LC_ALL=C
     sep=`echo -e "\t"`
 }
@@ -550,7 +553,7 @@ function stat_active()
     sort -t $'\t' -k 1,1 -k 5,5 $file_visit | awk -F '\t' 'BEGIN{
         OFS=FS
     }{
-        if($1 == aid){
+        if($1 == aid && substr($5,1,10) == active_date){
             visit_times++
         }else{
             if(aid != ""){
@@ -622,10 +625,31 @@ function stat_data()
     rm -f $file_new $file_new1 $file_new2 $file_active $file_active1 $file_visit1
 }
 
-# 校验数据
+# 校验数据(随机抽样)
 function check_data()
 {
-    echo "TODO"
+    local file_new=$tmp_dir/new.rand
+    echo "SELECT aid, channel_code, init_area, area, init_ip, ip, create_time, update_time FROM $tbl_fact_new ORDER BY RAND() LIMIT $rand_count;" | exec_dw > $file_new
+
+    # 校验新增
+    while read aid others; do
+        time_range=`echo "SELECT MIN(create_time), MAX(create_time) FROM $tbl_visit WHERE aid = '$aid';" | exec_dw`
+        min_time=`echo "$time_range" | cut -d $'\t' -f 1`
+        max_time=`echo "$time_range" | cut -d $'\t' -f 2`
+        channel_code=`echo "SELECT channel_code FROM $tbl_visit WHERE aid = '$aid' AND create_time = '$min_time' LIMIT 1;" | exec_dw`
+        init_area=`echo "SELECT area FROM $tbl_visit WHERE aid = '$aid' AND create_time = '$min_time' LIMIT 1;" | exec_dw`
+        area=`echo "SELECT area FROM $tbl_visit WHERE aid = '$aid' AND create_time = '$max_time' LIMIT 1;" | exec_dw`
+        init_ip=`echo "SELECT ip FROM $tbl_visit WHERE aid = '$aid' AND create_time = '$min_time' LIMIT 1;" | exec_dw`
+        ip=`echo "SELECT ip FROM $tbl_visit WHERE aid = '$aid' AND create_time = '$max_time' LIMIT 1;" | exec_dw`
+        data=`echo -e "${aid}\t${channel_code}\t${init_area}\t${area}\t${init_ip}\t${ip}\t${time_range}"`
+        if [[ ! `grep "${data}" $file_new` ]]; then
+            log "ERROR: unmatched data found aid: $aid" >&2
+            return 1
+        fi
+    done < $file_new
+
+    # 删除临时文件
+    rm -f $file_new
 }
 
 # 用法

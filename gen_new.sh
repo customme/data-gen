@@ -308,6 +308,7 @@ function check_data()
     # 比较
     diff $file_new1 $file_new2 > $file_diff
     if [[ -s $file_diff ]]; then
+        error_flag=1
         log "ERROR: unmatched channel add count found" >&2
     fi
 
@@ -316,6 +317,7 @@ function check_data()
     local count1=`awk '{count+=$3}END{print count}' $file_new1`
     local count2=`sort -u $file_id | wc -l`
     if [[ $count1 -ne $count2 ]]; then
+        error_flag=1
         log "ERROR: duplicate id found" >&2
     fi
 
@@ -323,6 +325,8 @@ function check_data()
     if [[ ! $debug_flag ]]; then
         rm -f $file_new1 $file_new2 $file_diff $file_id
     fi
+
+    return ${error_flag:-0}
 }
 
 # 用法

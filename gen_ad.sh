@@ -148,7 +148,7 @@ function allot_ad()
             ad_rate=`echo "$the_rate" | awk 'BEGIN{RS="[:,]"} NR % 2 == 0 {printf("%s,",$1 / 100)}' | sed 's/,$//'`
         fi
         if [[ -z "$ad_rate" ]]; then
-            log "Warn: invalid products rate"
+            log "WARN: invalid products rate" >&2
             continue
         fi
         log "Products rate: $prods $ad_rate"
@@ -519,15 +519,7 @@ function load_data()
 # 校验数据
 function check_data()
 {
-    awk -F '\t' 'BEGIN{
-        OFS=FS
-    }{
-        sum[$1"\t"$3"\t"$4] += $NF
-    }END{
-        for(k in sum){
-            print k,sum[k]
-        }
-    }' $file_ad_count | sort
+    echo "TODO"
 }
 
 # 用法
