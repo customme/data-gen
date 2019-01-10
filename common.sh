@@ -72,19 +72,13 @@ function range_month()
     done
 }
 
-# 去掉mysql安全告警
-function mysql_silent()
-{
-    grep -v ".*password.*command.*insecure"
-}
-
 # 执行元数据库sql
 function exec_meta()
 {
     local sql="${1:-`cat`}"
     local params="${2:--s -N --local-infile}"
 
-    echo "SET NAMES $META_DB_CHARSET;$sql" | mysql -h$META_DB_HOST -P$META_DB_PORT -u$META_DB_USER -p$META_DB_PASSWD $META_DB_NAME $params | mysql_silent
+    echo "SET NAMES $META_DB_CHARSET;$sql" | mysql -h$META_DB_HOST -P$META_DB_PORT -u$META_DB_USER -p$META_DB_PASSWD $META_DB_NAME $params
 }
 
 # 执行数据仓库sql
@@ -93,5 +87,5 @@ function exec_dw()
     local sql="${1:-`cat`}"
     local params="${2:--s -N --local-infile}"
 
-    echo "SET NAMES $DW_DB_CHARSET;$sql" | mysql -h$DW_DB_HOST -P$DW_DB_PORT -u$DW_DB_USER -p$DW_DB_PASSWD $DW_DB_NAME $params | mysql_silent
+    echo "SET NAMES $DW_DB_CHARSET;$sql" | mysql -h$DW_DB_HOST -P$DW_DB_PORT -u$DW_DB_USER -p$DW_DB_PASSWD $DW_DB_NAME $params
 }
