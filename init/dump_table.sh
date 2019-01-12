@@ -24,6 +24,7 @@ l_ip_abroad
 l_ip_native
 l_pro_city
 l_prod_keep
+t_city
 t_prod_adv_run
 t_prod_run"
 
